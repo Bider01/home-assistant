@@ -1,0 +1,110 @@
+alias: "Telegram Template - Command, Parameter, and Buttons"
+description: "Universal template for handling Telegram commands and action buttons"
+mode: single
+
+trigger:
+  # =========================================================================
+  # 1. COMMAND CONFIGURATION (e.g., /test)
+  # =========================================================================
+  - platform: event
+    event_type: telegram_command
+    event_data:
+      command: "/test"   # <-- SET YOUR COMMAND HERE
+    id: command_received
+
+  # =========================================================================
+  # 2. BUTTON CALLBACK HANDLING
+  # =========================================================================
+  - platform: event
+    event_type: telegram_callback
+    id: button_pressed
+
+condition: []
+
+action:
+  - choose:
+      # ---------------------------------------------------------------------
+      # A) WHEN A COMMAND IS SENT (e.g., /test or /test 22)
+      # ---------------------------------------------------------------------
+      - conditions:
+          - condition: trigger
+            id: command_received
+        sequence:
+          # Extract parameters (e.g., /test option -> args[0] = option)
+          - variables:
+              param1: "{{ trigger.event.data.args[0] if trigger.event.data.args | length > 0 else 'no_parameter' }}"
+              chat_id: "{{ trigger.event.data.chat_id }}"
+
+          # SEND RESPONSE MESSAGE AND BUTTONS
+          - action: telegram_bot.send_message
+            data:
+              target: "{{ chat_id }}"
+              # --- CONFIGURE YOUR RESPONSE MESSAGE HERE ---
+              message: >-
+                🤖 **Telegram Template Response**
+                
+                Received parameter: `{{ param1 }}`
+                
+                Select one of the options below:
+              # --- CONFIGURE YOUR ACTION BUTTONS HERE ---
+              # Format: "Button Label:/callback_id"
+              inline_keyboard:
+                - "💡 Light On:/act_light_on, 🌑 Light Off:/act_light_off"
+                - "ℹ️ Get Info:/act_info"
+
+      # ---------------------------------------------------------------------
+      # B) WHEN AN ACTION BUTTON IS PRESSED
+      # ---------------------------------------------------------------------
+      - conditions:
+          - condition: trigger
+            id: button_pressed
+          # Ensure only our specific callbacks are processed
+          - condition: template
+            value_template: "{{ trigger.event.data.command.startswith('/act_') }}"
+        sequence:
+          - variables:
+              action_code: "{{ trigger.event.data.command }}"
+              callback_id: "{{ trigger.event.data.id }}"
+              chat_id: "{{ trigger.event.data.chat_id }}"
+
+          # --- CONFIGURE ACTIONS FOR EACH BUTTON HERE ---
+          - choose:
+              # 1. BUTTON: Light On (/act_light_on)
+              - conditions:
+                  - condition: template
+                    value_template: "{{ action_code == '/act_light_on' }}"
+                sequence:
+                  - action: light.turn_on
+                    target:
+                      entity_id: light.living_room_light  # <-- Replace with your entity ID
+                  - action: telegram_bot.answer_callback_query
+                    data:
+                      callback_query_id: "{{ callback_id }}"
+                      message: "Light turned on!"
+
+              # 2. BUTTON: Light Off (/act_light_off)
+              - conditions:
+                  - condition: template
+                    value_template: "{{ action_code == '/act_light_off' }}"
+                sequence:
+                  - action: light.turn_off
+                    target:
+                      entity_id: light.living_room_light  # <-- Replace with your entity ID
+                  - action: telegram_bot.answer_callback_query
+                    data:
+                      callback_query_id: "{{ callback_id }}"
+                      message: "Light turned off!"
+
+              # 3. BUTTON: Get Info (/act_info)
+              - conditions:
+                  - condition: template
+                    value_template: "{{ action_code == '/act_info' }}"
+                sequence:
+                  - action: telegram_bot.answer_callback_query
+                    data:
+                      callback_query_id: "{{ callback_id }}"
+                      message: "Data updated!"
+                  - action: telegram_bot.send_message
+                    data:
+                      target: "{{ chat_id }}"
+                      message: "Current light state: {{ states('light.living_room_light') }}"
