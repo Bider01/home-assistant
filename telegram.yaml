@@ -1,15 +1,33 @@
-alias: "Telegram Template - Command, Parameter, and Buttons"
-description: "Universal template for handling Telegram commands and action buttons"
+blueprint:
+  name: "Telegram Command & Button Handler"
+  description: "Universal blueprint for handling Telegram commands, arguments, dynamic responses, and interactive callback buttons."
+  domain: automation
+  input:
+    telegram_command:
+      name: Command Name
+      description: "The Telegram command to trigger this automation (e.g., /test)"
+      default: "/test"
+      selector:
+        text:
+
+    target_light:
+      name: Target Light
+      description: "The light entity to control with the inline action buttons"
+      selector:
+        target:
+          entity:
+            domain: light
+
 mode: single
 
 trigger:
   # =========================================================================
-  # 1. COMMAND CONFIGURATION (e.g., /test)
+  # 1. COMMAND CONFIGURATION
   # =========================================================================
   - platform: event
     event_type: telegram_command
     event_data:
-      command: "/test"   # <-- SET YOUR COMMAND HERE
+      command: !input telegram_command
     id: command_received
 
   # =========================================================================
@@ -39,15 +57,12 @@ action:
           - action: telegram_bot.send_message
             data:
               target: "{{ chat_id }}"
-              # --- CONFIGURE YOUR RESPONSE MESSAGE HERE ---
               message: >-
                 🤖 **Telegram Template Response**
                 
                 Received parameter: `{{ param1 }}`
                 
                 Select one of the options below:
-              # --- CONFIGURE YOUR ACTION BUTTONS HERE ---
-              # Format: "Button Label:/callback_id"
               inline_keyboard:
                 - "💡 Light On:/act_light_on, 🌑 Light Off:/act_light_off"
                 - "ℹ️ Get Info:/act_info"
@@ -58,7 +73,6 @@ action:
       - conditions:
           - condition: trigger
             id: button_pressed
-          # Ensure only our specific callbacks are processed
           - condition: template
             value_template: "{{ trigger.event.data.command.startswith('/act_') }}"
         sequence:
@@ -75,8 +89,7 @@ action:
                     value_template: "{{ action_code == '/act_light_on' }}"
                 sequence:
                   - action: light.turn_on
-                    target:
-                      entity_id: light.living_room_light  # <-- Replace with your entity ID
+                    target: !input target_light
                   - action: telegram_bot.answer_callback_query
                     data:
                       callback_query_id: "{{ callback_id }}"
@@ -88,8 +101,7 @@ action:
                     value_template: "{{ action_code == '/act_light_off' }}"
                 sequence:
                   - action: light.turn_off
-                    target:
-                      entity_id: light.living_room_light  # <-- Replace with your entity ID
+                    target: !input target_light
                   - action: telegram_bot.answer_callback_query
                     data:
                       callback_query_id: "{{ callback_id }}"
@@ -107,4 +119,4 @@ action:
                   - action: telegram_bot.send_message
                     data:
                       target: "{{ chat_id }}"
-                      message: "Current light state: {{ states('light.living_room_light') }}"
+                      message: "Info requested successfully."
